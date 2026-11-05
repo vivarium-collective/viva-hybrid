@@ -29,3 +29,38 @@ fn bad_op_errors() {
     let bad = FIX.replace("\"mul\"", "\"mod\"");
     assert!(Model::from_json(&bad).is_err());
 }
+
+fn rate_json(rate: &str) -> String {
+    format!(
+        r#"{{"species":[{{"id":"S","initial":1.0}}],"params":{{}},"reactions":[{{"id":"R","partition":"continuous","stoichiometry":{{"S":-1}},"rate":{rate}}}]}}"#
+    )
+}
+
+#[test]
+fn multi_key_ast_errors() {
+    let bad = rate_json(r#"{"add":[{"const":1},{"const":2}],"mul":[{"const":1},{"const":2}]}"#);
+    assert!(Model::from_json(&bad).is_err());
+}
+
+#[test]
+fn wrong_arity_errors() {
+    assert!(Model::from_json(&rate_json(r#"{"add":[{"const":1}]}"#)).is_err());
+    assert!(Model::from_json(&rate_json(r#"{"add":[{"const":1},{"const":2},{"const":3}]}"#)).is_err());
+    assert!(Model::from_json(&rate_json(r#"{"add":[{"const":1},{"const":2}]}"#)).is_ok());
+}
+
+#[test]
+fn unknown_fields_error() {
+    assert!(Model::from_json(&FIX.replace("\"params\"", "\"extra\": 1, \"params\"")).is_err());
+    assert!(Model::from_json(&FIX.replace("\"initial\": 100.0", "\"initial\": 100.0, \"x\": 1")).is_err());
+    assert!(Model::from_json(&FIX.replace("\"id\": \"R1\"", "\"id\": \"R1\", \"x\": 1")).is_err());
+}
+
+#[test]
+fn bad_types_error() {
+    assert!(Model::from_json(&FIX.replace("\"initial\": 100.0", "\"initial\": \"100\"")).is_err());
+    assert!(Model::from_json(&FIX.replace("\"S\": -1", "\"S\": -1.5")).is_err());
+    assert!(Model::from_json(&FIX.replace("\"id\": \"R1\"", "\"id\": 7")).is_err());
+    assert!(Model::from_json(&rate_json(r#"{"const":"1"}"#)).is_err());
+    assert!(Model::from_json(&rate_json(r#"{"param":3}"#)).is_err());
+}

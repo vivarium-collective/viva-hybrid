@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Species {
     pub id: String,
     pub initial: f64,
@@ -36,6 +37,7 @@ pub enum Ast {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Reaction {
     pub id: String,
     pub partition: Partition,
@@ -44,6 +46,7 @@ pub struct Reaction {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Model {
     pub species: Vec<Species>,
     pub params: BTreeMap<String, f64>,

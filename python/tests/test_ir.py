@@ -42,3 +42,46 @@ def test_bad_op():
     from viva_hybrid_ref.ir import model_from_dict
     with pytest.raises(ValueError):
         model_from_dict(d)
+
+
+def _model(rate=None, **over):
+    d = json.loads(FIX.read_text())
+    if rate is not None:
+        d["reactions"][0]["rate"] = rate
+    d.update(over)
+    return d
+
+
+def _bad(d):
+    from viva_hybrid_ref.ir import model_from_dict
+    with pytest.raises(ValueError):
+        model_from_dict(d)
+
+
+C = {"const": 1}
+
+
+def test_multi_key_ast():
+    _bad(_model({"add": [C, C], "mul": [C, C]}))
+
+
+def test_wrong_arity():
+    _bad(_model({"add": [C]}))
+    _bad(_model({"add": [C, C, C]}))
+
+
+def test_unknown_fields():
+    _bad(_model(extra=1))
+    d = _model(); d["species"][0]["x"] = 1; _bad(d)
+    d = _model(); d["reactions"][0]["x"] = 1; _bad(d)
+
+
+def test_bad_types():
+    d = _model(); d["species"][0]["initial"] = "100"; _bad(d)
+    d = _model(); d["species"][0]["initial"] = True; _bad(d)
+    d = _model(); d["reactions"][0]["stoichiometry"]["S"] = -1.5; _bad(d)
+    d = _model(); d["reactions"][0]["stoichiometry"]["S"] = -1.0; _bad(d)
+    d = _model(); d["reactions"][0]["id"] = 7; _bad(d)
+    d = _model(); d["params"]["k"] = "0.5"; _bad(d)
+    _bad(_model({"const": "1"}))
+    _bad(_model({"param": 3}))
