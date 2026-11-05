@@ -30,3 +30,21 @@ fn rk4_multi_component() {
     }
     assert!((y[1] - 2.0).abs() < 1e-9);
 }
+
+#[test]
+fn workspace_step_bit_identical_to_rk4_step() {
+    use viva_hybrid::ode::Rk4Workspace;
+    let deriv = |y: &[f64], d: &mut [f64]| {
+        d[0] = -y[0];
+    };
+    let (mut ya, mut yb) = (vec![1.0], vec![1.0]);
+    let (mut oa, mut ob) = (vec![0.0], vec![0.0]);
+    let mut ws = Rk4Workspace::new(1);
+    for _ in 0..1000 {
+        ws.step(&deriv, &ya, 1e-3, &mut oa);
+        ya.copy_from_slice(&oa);
+        rk4_step(&deriv, &yb, 1e-3, &mut ob);
+        yb.copy_from_slice(&ob);
+        assert_eq!(ya[0].to_bits(), yb[0].to_bits());
+    }
+}
