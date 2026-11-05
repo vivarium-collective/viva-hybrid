@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .compare import REPO, RUN_IR
-from .hybrid_numba import simulate_numba
+from .hybrid_numba import lower, simulate_numba_lowered
 from .hybrid_plain import simulate_plain
 from .ir import dump_ir
 
@@ -70,18 +70,19 @@ def bench(model, cfg, repeats=3, replicates=None, binary=RUN_IR) -> Timings:
         rust.append(out["sim_seconds"])
         info = out
 
-    simulate_numba(model, dt, te, st, 0)      # JIT warmup, untimed
+    L = lower(model)                           # one-time setup, untimed
+    simulate_numba_lowered(L, dt, te, st, 0)   # JIT warmup, untimed
 
-    def timed(fn):
+    def timed(fn, subject):
         best = float("inf")
         for _ in range(repeats):
             t0 = time.perf_counter()
             for s in seeds:
-                fn(model, dt, te, st, s)
+                fn(subject, dt, te, st, s)
             best = min(best, time.perf_counter() - t0)
         return best
 
-    return Timings(min(rust), timed(simulate_plain), timed(simulate_numba),
+    return Timings(min(rust), timed(simulate_plain, model), timed(simulate_numba_lowered, L),
                    int(info["steps"]), int(info["events"]), n, repeats, dict(cfg))
 
 
@@ -114,8 +115,8 @@ def _verdict(r: float) -> str:
     if r < 2.0:
         return (f"NO-GO: Rust is only {r:.2f}x vs numba (< 2x); the thesis is dead "
                 "for this model class.")
-    return (f"MARGINAL: Rust is {r:.2f}x vs numba (2-5x); decide from the phase "
-            "breakdown.")
+    return (f"MARGINAL: Rust is {r:.2f}x vs numba (2-5x); decide qualitatively "
+            "(the phase breakdown is indicative only).")
 
 
 def report(t: Timings, pb: dict | None) -> str:
@@ -128,7 +129,7 @@ def report(t: Timings, pb: dict | None) -> str:
          f"- Work (Rust counters): {t.steps:,} RK4 steps, {t.events:,} stochastic events",
          "- Timing scope: numba JIT warmed before timing; Rust time is the in-process "
          "`sim_seconds` of the simulate loops only (no process start, IR parse, or JSON output); "
-         "plain/numba time only `simulate_*` calls (IR loading excluded).", "",
+         "plain/numba time only the per-seed run (IR loading and numba lowering done once, outside the timed region). Hybrid families use first-reach sampling (lag up to dt) while the exact SSA captures pre-event: different conventions by design.", "",
          "## Timings (best-of-k)", "",
          "| engine | total ms | us per RK4 step |", "|---|---:|---:|"]
     for name, s in (("Rust", t.rust_s), ("numba (warm)", t.numba_s), ("plain Python", t.plain_s)):
@@ -144,7 +145,7 @@ def report(t: Timings, pb: dict | None) -> str:
         ev = r["event_bookkeeping"]
         rest = tot - r["rk4_total"] - ev
         p = pb["python"]
-        L += ["## Phase breakdown (approximate)", "",
+        L += ["## Phase breakdown (indicative only; not a decision input)", "",
               "Method: separate instrumented runs, not the headline runs. Rust: `Instant` "
               "timers inside the loop (config `phases: true`); the timer calls themselves "
               "cost tens of ns each and a whole RK4 step is only ~0.1 us uninstrumented, so "

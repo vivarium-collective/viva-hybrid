@@ -174,6 +174,7 @@ def _run(x0, S, cont_idx, stoch_idx, code, fval, ival, off, depth,
     nxt = _capture(0.0, z, m, sample_times, out, 0)
     t = 0.0
     ns = stoch_idx.shape[0]
+    props = np.zeros(ns)
     while t + STOP_EPS < t_end:
         h = min(dt, t_end - t)
         saved[:] = z
@@ -191,12 +192,13 @@ def _run(x0, S, cont_idx, stoch_idx, code, fval, ival, off, depth,
         u_sel = _next_uniform()
         tot = 0.0
         for q in range(ns):
-            tot += _eval(stoch_idx[q], z[:m], code, fval, ival, off, stack)
+            props[q] = _eval(stoch_idx[q], z[:m], code, fval, ival, off, stack)
+            tot += props[q]
         target = u_sel * tot
         j = ns - 1
         acc = 0.0
         for q in range(ns):
-            acc += _eval(stoch_idx[q], z[:m], code, fval, ival, off, stack)
+            acc += props[q]
             if acc >= target:
                 j = q
                 break
@@ -215,9 +217,13 @@ def _run(x0, S, cont_idx, stoch_idx, code, fval, ival, off, depth,
     return out
 
 
-def simulate_numba(model, dt, t_end, sample_times, seed) -> Trajectory:
-    L = lower(model)
+def simulate_numba_lowered(L, dt, t_end, sample_times, seed) -> Trajectory:
+    """Run with a pre-lowered model (L = lower(model)); lowering is one-time setup."""
     ts = np.asarray(sample_times, dtype=np.float64)
     out = _run(L["x0"], L["S"], L["cont_idx"], L["stoch_idx"], L["code"], L["fval"],
                L["ival"], L["off"], L["depth"], float(dt), float(t_end), ts, int(seed))
     return Trajectory(times=list(sample_times), species=[row.tolist() for row in out])
+
+
+def simulate_numba(model, dt, t_end, sample_times, seed) -> Trajectory:
+    return simulate_numba_lowered(lower(model), dt, t_end, sample_times, seed)
