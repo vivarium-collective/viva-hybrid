@@ -62,8 +62,58 @@ fn capture(
     }
 }
 
+/// Work counters (always on; two integer increments per step).
+#[derive(Default, Clone, Copy, Debug)]
+pub struct Stats {
+    /// Accepted-step attempts (one full RK4 step each, excl. crossing re-integration).
+    pub steps: u64,
+    /// Stochastic events fired.
+    pub events: u64,
+}
+
+/// Coarse phase timers in nanoseconds (only filled by `simulate_instrumented`).
+#[derive(Default, Clone, Copy, Debug)]
+pub struct Phases {
+    pub rhs_continuous: u64,
+    pub rhs_stochastic: u64,
+    /// Total time inside RK4 `step` calls (includes the RHS time above).
+    pub rk4_total: u64,
+    /// Event selection, stoichiometry, RNG redraw, sample capture.
+    pub event_bookkeeping: u64,
+    pub total: u64,
+}
+
 /// Run the Haseltine–Rawlings hybrid simulation.
 pub fn simulate(model: &Model, cfg: &SimConfig) -> Trajectory {
+    simulate_impl(model, cfg, None).0
+}
+
+/// Like `simulate` but returns work counters.
+pub fn simulate_stats(model: &Model, cfg: &SimConfig) -> (Trajectory, Stats) {
+    let (t, s) = simulate_impl(model, cfg, None);
+    (t, s)
+}
+
+/// Like `simulate` but with coarse phase timers (adds `Instant::now` calls; never
+/// use for headline timings).
+pub fn simulate_instrumented(model: &Model, cfg: &SimConfig) -> (Trajectory, Stats, Phases) {
+    let mut ph = Phases::default();
+    let (t, s) = simulate_impl(model, cfg, Some(&mut ph));
+    (t, s, ph)
+}
+
+fn simulate_impl(
+    model: &Model,
+    cfg: &SimConfig,
+    mut phases: Option<&mut Phases>,
+) -> (Trajectory, Stats) {
+    use std::cell::Cell;
+    use std::time::Instant;
+    let timed = phases.is_some();
+    let t_cont = Cell::new(0u64);
+    let t_stoch = Cell::new(0u64);
+    let mut stats = Stats::default();
+    let t_all = Instant::now();
     let m = model.species.len();
     let n = m + 1; // augmented: species + g
 
@@ -106,17 +156,23 @@ pub fn simulate(model: &Model, cfg: &SimConfig) -> Trajectory {
             *v = 0.0;
         }
         let x = &y[..m];
+        let t0 = if timed { Some(Instant::now()) } else { None };
         for (rate, stoich) in &continuous {
             let a = rate.eval(x);
             for (s, nu) in stoich {
                 d[*s] += nu * a;
             }
         }
+        let t1 = if timed { Some(Instant::now()) } else { None };
         let mut gsum = 0.0;
         for (rate, _) in &stochastic {
             gsum += rate.eval(x);
         }
         d[m] = gsum;
+        if let (Some(a), Some(b)) = (t0, t1) {
+            t_cont.set(t_cont.get() + (b - a).as_nanos() as u64);
+            t_stoch.set(t_stoch.get() + b.elapsed().as_nanos() as u64);
+        }
     };
 
     // State buffers.
@@ -146,7 +202,12 @@ pub fn simulate(model: &Model, cfg: &SimConfig) -> Trajectory {
         let h = cfg.dt.min(cfg.t_end - t);
 
         z_saved.copy_from_slice(&z);
+        stats.steps += 1;
+        let ts = if timed { Some(Instant::now()) } else { None };
         ws.step(&deriv, &z_saved, h, &mut z_next);
+        if let (Some(p), Some(a)) = (phases.as_deref_mut(), ts) {
+            p.rk4_total += a.elapsed().as_nanos() as u64;
+        }
 
         if z_next[m] < threshold {
             // No stochastic event in this step: accept.
@@ -160,7 +221,13 @@ pub fn simulate(model: &Model, cfg: &SimConfig) -> Trajectory {
             let g_before = z_saved[m];
             let g_after = z_next[m];
             let f = ((threshold - g_before) / (g_after - g_before)).clamp(0.0, 1.0);
+            let ts = if timed { Some(Instant::now()) } else { None };
             ws.step(&deriv, &z_saved, f * h, &mut z_next);
+            if let (Some(p), Some(a)) = (phases.as_deref_mut(), ts) {
+                p.rk4_total += a.elapsed().as_nanos() as u64;
+            }
+            let te = if timed { Some(Instant::now()) } else { None };
+            stats.events += 1;
             z.copy_from_slice(&z_next);
             t += f * h;
 
@@ -205,11 +272,22 @@ pub fn simulate(model: &Model, cfg: &SimConfig) -> Trajectory {
             threshold = -rng.next_uniform().ln();
 
             capture(t, &z[..m], &cfg.sample_times, &mut sample_next, &mut species_out);
+            if let (Some(p), Some(a)) = (phases.as_deref_mut(), te) {
+                p.event_bookkeeping += a.elapsed().as_nanos() as u64;
+            }
         }
     }
 
-    Trajectory {
-        times: cfg.sample_times.clone(),
-        species: species_out,
+    if let Some(p) = phases.as_deref_mut() {
+        p.rhs_continuous += t_cont.get();
+        p.rhs_stochastic += t_stoch.get();
+        p.total += t_all.elapsed().as_nanos() as u64;
     }
+    (
+        Trajectory {
+            times: cfg.sample_times.clone(),
+            species: species_out,
+        },
+        stats,
+    )
 }
