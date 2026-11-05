@@ -73,7 +73,13 @@ def sbml_to_ir(sbml_path, partition_path) -> Model:
     m = doc.getModel()
     part = _load_partition(partition_path)
 
-    species = [Species(s.getId(), float(s.getInitialAmount())) for s in m.getListOfSpecies()]
+    species = []
+    for s in m.getListOfSpecies():
+        if not s.isSetInitialAmount():
+            raise ValueError(
+                f"species {s.getId()!r}: no initialAmount (concentration-initialized "
+                "species are not supported)")
+        species.append(Species(s.getId(), float(s.getInitialAmount())))
     sids = {s.id for s in species}
     params = {p.getId(): float(p.getValue()) for p in m.getListOfParameters()}
 
@@ -96,6 +102,9 @@ def sbml_to_ir(sbml_path, partition_path) -> Model:
             raise ValueError(f"reaction {rid!r}: no kinetic law")
         rate = _ast(kl.getMath(), sids, params, f"reaction {rid!r}")
         reactions.append(Reaction(rid, tag, stoich, rate))
+    unmatched = sorted(set(map(str, part)) - {r.id for r in reactions})
+    if unmatched:
+        raise ValueError(f"partition sidecar keys match no reaction: {unmatched}")
     return Model(species=species, params=params, reactions=reactions)
 
 

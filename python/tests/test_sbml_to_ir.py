@@ -44,3 +44,19 @@ def test_unary_minus_and_power(tmp_path):
     r = sbml_to_ir(x, FIX / "mini.partition.yaml").reactions[0].rate
     assert r.op == "mul" and r.arg[0].op == "const" and r.arg[0].arg == -1.0
     assert r.arg[1].op == "pow"
+
+
+def test_unknown_sidecar_key_raises(tmp_path):
+    p = tmp_path / "p.yaml"
+    p.write_text("R1: continuous\nR2: stochastic\nR3: continuous\n")
+    with pytest.raises(ValueError, match="R3"):
+        sbml_to_ir(FIX / "mini.xml", p)
+
+
+def test_concentration_only_species_raises(tmp_path):
+    x = tmp_path / "m.xml"
+    x.write_text((FIX / "mini.xml").read_text().replace(
+        'id="S" compartment="c" initialAmount="100"',
+        'id="S" compartment="c" initialConcentration="100"'))
+    with pytest.raises(ValueError, match="S"):
+        sbml_to_ir(x, FIX / "mini.partition.yaml")
