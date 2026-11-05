@@ -111,6 +111,7 @@ def compare_distributions(set_a, set_b, species, times, tol, species_ids,
     """
     check_var = set(species if check_var is None else check_var)
     check_ks = set(species if check_ks is None else check_ks)
+    assert list(set_a[0].times) == list(set_b[0].times), "mismatched time grids"
     grid = list(set_a[0].times)
     rep = Report()
     for name in species:

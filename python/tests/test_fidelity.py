@@ -17,11 +17,12 @@ is skipped (continuous vs discrete); protein mean and variance are compared.
 (The hybrid drops translation shot noise, ~mean=500 of variance ~7e4, i.e. <1%,
 far below the ~4% variance SE at N=1000, so it is not detectable here.)
 """
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from viva_hybrid_ref.compare import RUN_IR, compare_distributions, run_all
+from viva_hybrid_ref.compare import REPO, RUN_IR, compare_distributions, run_all
 from viva_hybrid_ref.sbml_to_ir import sbml_to_ir
 
 M = Path(__file__).resolve().parents[2] / "models"
@@ -31,12 +32,12 @@ TIMES = CFG["sample_times"]
 TOL = dict(z_mean=4.0, z_var=4.0, ks_alpha=0.001)
 KEY = ["mRNA", "protein"]
 
-pytestmark = pytest.mark.skipif(
-    not RUN_IR.exists(), reason="build first: cargo build --release --bin run_ir")
-
-
 @pytest.fixture(scope="module")
 def runs():
+    # Precondition: the gate builds its own binary and can never skip.
+    subprocess.run(["cargo", "build", "--release", "--bin", "run_ir"],
+                   cwd=REPO, check=True)
+    assert RUN_IR.exists(), f"run_ir binary missing after build: {RUN_IR}"
     model = sbml_to_ir(M / "burst_gene_expression.xml",
                        M / "burst_gene_expression.partition.yaml")
     ids = [s.id for s in model.species]
