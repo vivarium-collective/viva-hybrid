@@ -1,0 +1,13 @@
+{
+  "species": [
+    {"id": "S", "initial": 100.0},
+    {"id": "P", "initial": 0.0}
+  ],
+  "params": {"k": 0.5},
+  "reactions": [
+    {"id": "R1", "partition": "continuous", "stoichiometry": {"S": -1, "P": 1},
+     "rate": {"mul": [{"param": "k"}, {"species": "S"}]}},
+    {"id": "R2", "partition": "stochastic", "stoichiometry": {"P": -1},
+     "rate": {"mul": [{"const": 0.1}, {"species": "P"}]}}
+  ]
+}
