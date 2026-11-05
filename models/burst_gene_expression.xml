@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sbml xmlns="http://www.sbml.org/sbml/level3/version1/core" level="3" version="1">
+  <model id="burst_gene_expression">
+    <listOfCompartments>
+      <compartment id="c" size="1" constant="true" spatialDimensions="3"/>
+    </listOfCompartments>
+    <listOfSpecies>
+      <species id="G_off" compartment="c" initialAmount="1" hasOnlySubstanceUnits="true" boundaryCondition="false" constant="false"/>
+      <species id="G_on" compartment="c" initialAmount="0" hasOnlySubstanceUnits="true" boundaryCondition="false" constant="false"/>
+      <species id="mRNA" compartment="c" initialAmount="0" hasOnlySubstanceUnits="true" boundaryCondition="false" constant="false"/>
+      <species id="protein" compartment="c" initialAmount="0" hasOnlySubstanceUnits="true" boundaryCondition="false" constant="false"/>
+    </listOfSpecies>
+    <listOfParameters>
+      <parameter id="k_on" value="0.05" constant="true"/>
+      <parameter id="k_off" value="0.15" constant="true"/>
+      <parameter id="k_tx" value="2.0" constant="true"/>
+      <parameter id="k_dm" value="0.1" constant="true"/>
+      <parameter id="k_tl" value="2.0" constant="true"/>
+      <parameter id="k_dp" value="0.02" constant="true"/>
+    </listOfParameters>
+    <listOfReactions>
+      <reaction id="R_act" reversible="false" fast="false">
+        <listOfReactants><speciesReference species="G_off" stoichiometry="1" constant="true"/></listOfReactants>
+        <listOfProducts><speciesReference species="G_on" stoichiometry="1" constant="true"/></listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply><times/><ci> k_on </ci><ci> G_off </ci></apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="R_deact" reversible="false" fast="false">
+        <listOfReactants><speciesReference species="G_on" stoichiometry="1" constant="true"/></listOfReactants>
+        <listOfProducts><speciesReference species="G_off" stoichiometry="1" constant="true"/></listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply><times/><ci> k_off </ci><ci> G_on </ci></apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="R_tx" reversible="false" fast="false">
+        <listOfReactants><speciesReference species="G_on" stoichiometry="1" constant="true"/></listOfReactants>
+        <listOfProducts><speciesReference species="G_on" stoichiometry="1" constant="true"/><speciesReference species="mRNA" stoichiometry="1" constant="true"/></listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply><times/><ci> k_tx </ci><ci> G_on </ci></apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="R_dm" reversible="false" fast="false">
+        <listOfReactants><speciesReference species="mRNA" stoichiometry="1" constant="true"/></listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply><times/><ci> k_dm </ci><ci> mRNA </ci></apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="R_tl" reversible="false" fast="false">
+        <listOfReactants><speciesReference species="mRNA" stoichiometry="1" constant="true"/></listOfReactants>
+        <listOfProducts><speciesReference species="mRNA" stoichiometry="1" constant="true"/><speciesReference species="protein" stoichiometry="1" constant="true"/></listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply><times/><ci> k_tl </ci><ci> mRNA </ci></apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="R_dp" reversible="false" fast="false">
+        <listOfReactants><speciesReference species="protein" stoichiometry="1" constant="true"/></listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply><times/><ci> k_dp </ci><ci> protein </ci></apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+    </listOfReactions>
+  </model>
+</sbml>
