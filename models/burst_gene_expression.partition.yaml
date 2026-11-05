@@ -1,0 +1,6 @@
+R_act: stochastic
+R_deact: stochastic
+R_tx: stochastic
+R_dm: stochastic
+R_tl: continuous
+R_dp: continuous
