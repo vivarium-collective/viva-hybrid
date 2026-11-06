@@ -25,8 +25,9 @@ AXIS_LABELS = {
     "event_density": "event density (reaction events per unit time per species, swept 1-1000)",
     "system_size": "system size (number of species, swept 3-100)",
     "stochastic_fraction": "stochastic fraction (share of reactions treated stochastically)",
+    "copy_number": "copy-number center N0 (initial molecule count per species, swept 20-1000)",
 }
-AXES = ("event_density", "system_size", "stochastic_fraction")
+AXES = ("event_density", "system_size", "stochastic_fraction", "copy_number")
 
 CAPTION = (
     "Speedup is vs the <b>numba</b> baseline, the fair competitor (vs plain Python it is "
@@ -35,6 +36,19 @@ CAPTION = (
     "<b>Copy number is NOT swept</b> and is the axis most likely to open a faithful-and-fast region. "
     "At stochastic_fraction = 1.0 the hybrid <i>is</i> the exact stochastic path, so fidelity "
     "there tests engine correctness, not an approximation. No claim is made beyond this regime."
+)
+
+COPY_CAPTION = (
+    "The follow-up axis: <b>copy-number center N0 swept 20&ndash;1000</b> at the speedup corner "
+    "(system_size=100, density=100, timescale_sep=10, dt=0.01) &mdash; the only region the first "
+    "maps found &ge;5&times;. Speedup is vs <b>numba</b> (vs plain Python &ge;~35&times;). The map "
+    "is <b>flat in copy number</b>: every &ge;5&times; cell stays fidelity FAIL at N0 up to 1000. "
+    "The failure is entirely <b>variance</b> &mdash; the deterministic <i>mean</i> is faithful at "
+    "every copy number (worst |z<sub>mean</sub>| ~2.5&ndash;5), but the hybrid gives continuous "
+    "species ~zero intrinsic noise while exact SSA has variance ~N0, a gap whose z-score "
+    "(~16, hover shows worst overall |z|) does not shrink as N0 grows. At stochastic_fraction = 1.0 "
+    "the hybrid <i>is</i> the exact path (no continuous species, so fidelity passes &mdash; engine "
+    "correctness, not an approximation)."
 )
 
 
@@ -52,7 +66,7 @@ def _fmt(v):
     return f"{v:g}"
 
 
-def render_regime_map(json_path, out_html, *, title) -> None:
+def render_regime_map(json_path, out_html, *, title, caption=CAPTION) -> None:
     cells = json.loads(Path(json_path).read_text())
     x_key, y_key = _axes(cells)
     xs = sorted({c[x_key] for c in cells})
@@ -104,7 +118,7 @@ def render_regime_map(json_path, out_html, *, title) -> None:
         yaxis=dict(title=AXIS_LABELS.get(y_key, y_key), type="category", showgrid=False),
         legend=dict(orientation="h", y=-0.28, x=0, font=dict(color=INK)),
         margin=dict(l=80, r=40, t=70, b=230), height=760,
-        annotations=[dict(text=CAPTION, xref="paper", yref="paper", x=0, y=-0.42,
+        annotations=[dict(text=caption, xref="paper", yref="paper", x=0, y=-0.42,
                           xanchor="left", yanchor="top", showarrow=False, align="left",
                           font=dict(size=12, color=MUTED), width=900)],
     )
@@ -116,12 +130,18 @@ def main() -> None:
     d = Path(__file__).resolve().parents[2] / "reports" / "regime"
     jobs = [
         ("event_density_x_stochastic_fraction",
-         "Regime map: event density × stochastic fraction"),
+         "Regime map: event density × stochastic fraction", CAPTION),
         ("system_size_x_stochastic_fraction",
-         "Regime map: system size × stochastic fraction"),
+         "Regime map: system size × stochastic fraction", CAPTION),
+        ("copy_number_x_stochastic_fraction",
+         "Regime map: copy number × stochastic fraction (follow-up axis)", COPY_CAPTION),
     ]
-    for axes, title in jobs:
-        render_regime_map(d / f"sweep_{axes}.json", d / f"regime_map_{axes}.html", title=title)
+    for axes, title, caption in jobs:
+        src = d / f"sweep_{axes}.json"
+        if not src.exists():
+            print("skip (no data):", src)
+            continue
+        render_regime_map(src, d / f"regime_map_{axes}.html", title=title, caption=caption)
         print("wrote", d / f"regime_map_{axes}.html")
 
 

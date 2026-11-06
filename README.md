@@ -17,9 +17,11 @@ Two layers:
 
 ## Headline finding
 
-**Across the swept regime (copy numbers ~10–30, event density 1–1000/min, system size 3–100, timescale separation 10×, dt 0.01), no model is both ≥5× faster than the numba baseline *and* faithful to exact SSA.** The only ≥5× cells (large systems, low stochastic-fraction — up to 10.8×) are exactly where the hybrid partition is inaccurate; the faithful cells (fully stochastic) are ~1×. Against *plain* Python the engine is 29–52× everywhere, but numba is the honest competitor.
+**Across the swept regime (event density 1–1000/min, system size 3–100, stochastic fraction, and copy number N0 20–1000, at timescale separation 10×, dt 0.01), no model is both ≥5× faster than the numba baseline *and* faithful to exact SSA.** The only ≥5× cells (large systems, low stochastic-fraction — up to ~11×) are exactly where the hybrid partition is inaccurate; the faithful cells (fully stochastic) are ~1×. Against *plain* Python the engine is ~30–55× everywhere, but numba is the honest competitor.
 
-**Key open question:** copy number was not swept and is the axis most likely to open a faithful-and-fast window (high-copy continuous species are well-approximated deterministically).
+**Copy number — the axis flagged as most likely to open a faithful-and-fast window — does not.** Swept 20→1000 at the ≥5× speedup corner (system_size=100), the map is *flat*: every ≥5× cell stays fidelity FAIL. The failure is entirely **variance** — the deterministic *mean* is faithful at every copy number (worst |z| ~2.5–5), but the hybrid gives continuous species ~zero intrinsic noise while exact SSA has variance ~N0, a gap whose z-score (~16) is copy-number-invariant by construction.
+
+**Key open question:** the failure is variance-only, so a **mean-only or relative-variance fidelity criterion** (or a variance-preserving partition / tau-leaping variant) is the next lever — under a mean-only criterion the ≥5× region is already faithful.
 
 ## Install (development)
 
@@ -66,7 +68,7 @@ vivarium-workbench serve --workspace .                    # from a venv with viv
 
 ## Limitations
 
-- Copy number (species abundance) was held low (~10–30) and not swept; the fidelity frontier is copy-number-dependent.
-- "≥5×" is measured against the numba-jitted baseline (the fair competitor); plain Python is ≥29× everywhere.
+- Copy number (species abundance) has been swept (N0 20–1000) at the speedup corner and does not open a faithful-and-fast window; the residual caveat is that the failure is variance-only (the mean is faithful at every copy number), so the verdict is specific to a variance-sensitive fidelity gate.
+- "≥5×" is measured against the numba-jitted baseline (the fair competitor); plain Python is ≥~30× everywhere.
 - Single timescale separation (10×), dt (0.01) and horizon; moderate replicate counts (timing best-of-3 × 20 seeds; fidelity N=400/cell).
 - At stochastic-fraction = 1.0 the hybrid reduces to the exact stochastic path, so fidelity there tests engine correctness, not the approximation.
