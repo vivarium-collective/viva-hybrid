@@ -1,7 +1,7 @@
 {
   "mode": "snapshot",
   "smsApiBase": "",
-  "repo": "https://github.com/vivarium-collective/viva-hybrid.git",
-  "commit": "5fe8612fd42372488815113081a82b90b2f7e265",
-  "generated_from_ref": "copy-number-sweep"
+  "repo": "https://github.com/vivarium-collective/viva-hybrid",
+  "commit": "25107365d93d0f36e72ca67b55bf286b50fc4a23",
+  "generated_from_ref": "main"
 }
