@@ -30,28 +30,22 @@ def _ensure_binary():
 
 
 def _fidelity(model, cfg, n_reps, seed):
-    """Hybrid (Rust) vs exact SSA at all sample times.
-    Mean is checked on ALL species. Variance and K-S only on stochastic-partition
-    species (ALL reactions touching them are stochastic, so they stay integer-valued
-    in the hybrid). Continuous-partition species are deterministic ODE variables by
-    design: they carry ~no variance while exact SSA shows ~Poisson noise, so a
-    variance/K-S check there would flag the partition itself, not an engine error."""
+    """Hybrid (Rust) vs exact SSA at all sample times: mean, variance AND K-S on ALL
+    species, continuous-partition ones included. Dropping a continuous species'
+    intrinsic variance IS the partition's approximation error, so it must count
+    against fidelity. Tolerances are the gate's (|z|<=4, K-S alpha=0.001)."""
     ids = [s.id for s in model.species]
-    touch = {}
-    for r_ in model.reactions:
-        for sp in r_.stoichiometry:
-            touch.setdefault(sp, set()).add(r_.partition)
-    stoch_sp = {sp for sp, parts in touch.items() if parts == {"stochastic"}}
     r = run_all(model, cfg, n_reps, seed_start=seed * 100_000)
     with warnings.catch_warnings():   # scipy notes K-S falling back to the asymptotic p (ties)
         warnings.filterwarnings("ignore", message="ks_2samp: Exact calculation")
-        rep = compare_distributions(r["rust"], r["exact"], ids, list(cfg["sample_times"]), TOL, ids,
-                                    check_var=sorted(stoch_sp), check_ks=sorted(stoch_sp))
-    zs = [max(abs(x.z_mean), abs(x.z_var) if x.species in stoch_sp else 0.0) for x in rep.rows]
+        rep = compare_distributions(r["rust"], r["exact"], ids, list(cfg["sample_times"]), TOL, ids)
+    zs = [max(abs(x.z_mean), abs(x.z_var)) for x in rep.rows]
     ks = [x.ks_p for x in rep.rows if not math.isnan(x.ks_p)]
+    fails = sorted({f"{x.species}@{x.time:g}:{x.why}" for x in rep.rows if not x.ok})
     return dict(fidelity_ok=bool(rep.passed), worst_abs_z=float(max(zs)),
                 min_ks_p=float(min(ks)) if ks else None,
-                fidelity_fail=sorted({f"{x.species}@{x.time:g}:{x.why}" for x in rep.rows if not x.ok}))
+                n_fail_rows=sum(not x.ok for x in rep.rows), n_rows=len(rep.rows),
+                fidelity_fail=fails)
 
 
 def sweep_point(*, event_density, stochastic_fraction, system_size, timescale_sep, dt, t_end,
@@ -108,32 +102,37 @@ def summary(results, axis_x, axis_y) -> str:
     return "\n".join(L)
 
 
-# Default: event_density x stochastic_fraction, S=10, sep=10.
-# Timing: 20 replicates x best-of-3 (min suppresses scheduler noise; 20 seeds average
-# over trajectory-length variance). Fidelity: N=200 hybrid + 200 exact replicates
-# (z-test SE ~10% of sd; mean/var drifts > ~4 SE flagged; K-S alpha 0.001 as in the gate).
-DEFAULT = dict(
-    axes=("event_density", "stochastic_fraction"),
-    grid=dict(event_density=[1, 10, 100, 300, 1000],
-              stochastic_fraction=[0.1, 0.25, 0.5, 0.75, 1.0]),
-    fixed=dict(system_size=10, timescale_sep=10.0, dt=0.01, t_end=1.0,
-               sample_times=[0.25, 0.5, 1.0]),
-    timing=dict(n_time_reps=20, n_time_repeats=3),
-    fidelity=dict(n_fidelity_reps=200),
-)
+# Two default maps, both x stochastic_fraction (timescale_sep=10, dt=0.01, t_end=1):
+#   density x fraction  (system_size=10)   and   system_size x fraction (density=100).
+# Timing: 20 replicate seeds x best-of-3. Fidelity: N=400 hybrid + 400 exact replicates
+# (variance is load-bearing, so SE of the variance ~7% of sd; tolerances unchanged).
+_COMMON = dict(timescale_sep=10.0, dt=0.01, t_end=1.0, sample_times=[0.25, 0.5, 1.0])
+_F = [0.1, 0.25, 0.5, 0.75, 1.0]
+MAPS = [
+    dict(axes=("event_density", "stochastic_fraction"),
+         grid=dict(event_density=[1, 10, 100, 1000], stochastic_fraction=_F),
+         fixed=dict(_COMMON, system_size=10)),
+    dict(axes=("system_size", "stochastic_fraction"),
+         grid=dict(system_size=[3, 10, 30, 100], stochastic_fraction=_F),
+         fixed=dict(_COMMON, event_density=100.0)),
+]
+TIMING = dict(n_time_reps=20, n_time_repeats=3)
+FIDELITY = dict(n_fidelity_reps=400)
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--out-dir", default=str(REPO / "reports" / "regime"))
     a = ap.parse_args(argv)
-    ax, ay = DEFAULT["axes"]
-    res = run_sweep(ax, ay, fixed=DEFAULT["fixed"], grid=DEFAULT["grid"],
-                    timing=DEFAULT["timing"], fidelity=DEFAULT["fidelity"])
-    path = save_results(res, Path(a.out_dir) / f"sweep_{ax}_x_{ay}.json")
-    print(summary(res, ax, ay))
-    print(f"wrote {path}")
-    return res
+    allres = []
+    for mp in MAPS:
+        ax, ay = mp["axes"]
+        res = run_sweep(ax, ay, fixed=mp["fixed"], grid=mp["grid"], timing=TIMING, fidelity=FIDELITY)
+        path = save_results(res, Path(a.out_dir) / f"sweep_{ax}_x_{ay}.json")
+        print(summary(res, ax, ay))
+        print(f"wrote {path}")
+        allres.append(res)
+    return allres
 
 
 if __name__ == "__main__":
