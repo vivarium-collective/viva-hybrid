@@ -469,5 +469,86 @@ else:
 # regime-frontier-map
 _save_viz('regime-frontier', 'regime-frontier-map', _render_one('', {}, RUNS_DB, STUDY_YAML))
 
+# ## Study: Copy-number frontier: does high copy open a faithful-and-fast window? (`copy-number-frontier`)
+#
+# **Question.** The regime-frontier map found the only >=5x cells at large system size + low stochastic
+# fraction, all fidelity FAIL, and flagged copy number (held ~10-30) as the untested axis most
+# likely to open a faithful-and-fast window: high-copy continuous species should be well
+# approximated deterministically. Sweeping copy-number center N0 from 20 to 1000 at that
+# speedup corner (system_size=100, density=100), does raising copy number make any >=5x cell
+# faithful to exact SSA?
+#
+# **Claim.** No. The map is FLAT in copy number. At N0 from 20 to 1000, every >=5x cell (stochastic
+# fraction <= 0.5; 10-11x at fraction 0.1, ~7x at 0.25) FAILS fidelity with worst |z| ~16, and
+# the value barely moves across a 50x copy-number range. The failure is entirely VARIANCE: the
+# deterministic mean is faithful at every copy number (worst |z_mean| ~2.5-5, at/below the |z|<=4
+# gate), but the hybrid gives continuous species ~zero intrinsic variance while exact SSA has
+# variance ~N0, so worst |z_var| stays ~16 regardless of copy number. The gap is copy-number-
+# invariant by construction, so copy number was never going to close it. Faithful cells remain
+# only at stochastic_fraction = 1.0 (fully stochastic, ~1x). 0 of 16 cells are both >=5x and
+# faithful. This resolves the open decision from regime-frontier and strengthens the
+# investigation verdict: no faithful-and-fast regime exists even with copy number swept.
+
+# ### Parameters
+#
+# | simulation | composite | steps | params |
+# | --- | --- | --- | --- |
+# | `swept-models` | `viva_hybrid.composites.regime.rust_hybrid_benchmark` | 0 | — |
+
+# ### The model & its parameters
+#
+# Each composite is a process-bigraph *document* — named processes wired by `inputs`/`outputs` ports over shared stores. Below, each composite shows what it does, then a **parameter cell** with its tunable knobs (the current default and what each one means). Edit any value, then re-run the **Run** section to rebuild and re-simulate with your changes.
+
+# **The model — `viva_hybrid.composites.regime.rust_hybrid_benchmark`**
+#
+# Rust hybrid ODE/SSA engine on the bursting gene-expression benchmark; emits per-species final means plus the engine's own simulate wall-time and RK4-step / stochastic-event counts.
+
+# === Parameters — edit any value, then re-run from the Run cell below ===
+# Each entry is the composite's current default; the comment explains it.
+ov_viva_hybrid_composites_regime_rust_hybrid_benchmark = {
+    'n_replicates': 50,   # Number of replicate seeds
+    'dt'          : 0.1,   # Fixed RK4 step size (minutes)
+    't_end'       : 300.0,   # Simulation horizon (minutes)
+}
+
+# ### Run
+#
+# _Set `STEPS`, then run. Each composite is built live from its (edited) spec above and run; a composite whose module processes aren't implemented yet reports the error instead of crashing. Set `RERUN = False` to skip re-simulating._
+
+# === Study: copy-number-frontier ===
+STUDY = 'copy-number-frontier'
+STUDY_DIR = REPO / 'workspace/studies' / STUDY
+STUDY_YAML = str(STUDY_DIR / "study.yaml")
+RUNS_DB = str(STUDY_DIR / "runs.db")
+
+# This study has no *recorded* runs yet. RERUN builds its declared
+# composite(s) live and runs them; a composite whose module processes
+# are not implemented yet reports the error instead of crashing.
+STEPS_swept_models = 100
+INTERVAL_swept_models = 1.0
+
+if RERUN:
+    from process_bigraph import Composite
+    try:
+        with quiet():  # keep per-step stdout out of the notebook
+            _ov = ov_viva_hybrid_composites_regime_rust_hybrid_benchmark if 'ov_viva_hybrid_composites_regime_rust_hybrid_benchmark' in dir() else None  # edits from the panel cell, if any
+            spec_viva_hybrid_composites_regime_rust_hybrid_benchmark = materialize_composite('viva_hybrid.composites.regime.rust_hybrid_benchmark', _ov)
+            _comp = Composite({'state': spec_viva_hybrid_composites_regime_rust_hybrid_benchmark['state']}, core=core)
+            _comp.run(STEPS_swept_models)
+        print('ran', 'swept-models', f'(viva_hybrid.composites.regime.rust_hybrid_benchmark) for', STEPS_swept_models, 'steps')
+    except Exception as _e:
+        print(f"swept-models not runnable yet: {type(_e).__name__}: {_e}")
+else:
+    print("RERUN=False — not re-simulating.")
+
+# ### Visualizations
+#
+# _Results are shown by the figures below, produced by the run above._
+
+# **copy-number-frontier-map**
+
+# copy-number-frontier-map
+_save_viz('copy-number-frontier', 'copy-number-frontier-map', _render_one('', {}, RUNS_DB, STUDY_YAML))
+
 # ## Open decisions
-# - Sweep copy number / species abundance as an axis?
+# - Adopt a variance-tolerant fidelity criterion (mean-only / relative-variance), or redesign the partition?
