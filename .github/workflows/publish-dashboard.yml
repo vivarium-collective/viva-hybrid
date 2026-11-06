@@ -54,7 +54,11 @@ jobs:
         # composite in the dashboard rather than aborting the whole publish.
         run: |
           uv venv
-          uv pip install "vivarium-workbench @ git+https://github.com/vivarium-collective/vivarium-workbench.git@main"
+          # --refresh-package / --reinstall-package: setup-uv caches uv's git clone
+          # of @main, so without this uv can reuse a STALE cached commit and
+          # republish a pre-merge bundle while the run stays green. Force a re-fetch
+          # of the tip.
+          uv pip install --refresh-package vivarium-workbench --reinstall-package vivarium-workbench "vivarium-workbench @ git+https://github.com/vivarium-collective/vivarium-workbench.git@main"
           uv pip install -e . --no-deps || echo "workspace has no installable build; composites render from spec only"
 
       - name: Build dashboard snapshot
@@ -81,13 +85,18 @@ jobs:
             git rm -rf . >/dev/null 2>&1 || true
             touch .nojekyll
           fi
+          # The bundle is built with base-path /viva-hybrid/workbench, so it MUST be
+          # served from workbench/ (the root index.html redirects there). Publish to
+          # workbench/ and leave a legacy dashboard/ → ../workbench/ redirect.
+          rm -rf workbench && mkdir -p workbench
+          cp -R "$GITHUB_WORKSPACE/reports/published/dashboard/." workbench/
           rm -rf dashboard && mkdir -p dashboard
-          cp -R "$GITHUB_WORKSPACE/reports/published/dashboard/." dashboard/
+          printf '<!doctype html><meta http-equiv="refresh" content="0; url=../workbench/">\n' > dashboard/index.html
           git add -A
           if git diff --cached --quiet; then
-            echo "dashboard snapshot unchanged; skipping commit"
+            echo "read-only workbench snapshot unchanged; skipping commit"
           else
-            git commit -m "gh-pages: republish read-only dashboard (automated, ${GITHUB_SHA::7})"
+            git commit -m "gh-pages: republish read-only workbench (automated, ${GITHUB_SHA::7})"
             git push origin gh-pages
-            echo "published read-only dashboard to gh-pages:dashboard/"
+            echo "published read-only workbench to gh-pages:workbench/"
           fi
