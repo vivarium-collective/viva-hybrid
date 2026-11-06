@@ -1,0 +1,29 @@
+schema_version: 4
+name: speedup-landscape
+title: "Speedup landscape: event density x stochastic fraction"
+investigation: rust-hybrid-regime-map
+status: complete
+confidence: Accepted
+parent_studies:
+  - {study: rust-engine-in-workbench, condition: complete}
+question: |
+  Across event density and stochastic fraction (system size fixed at 10), how large is
+  the Rust-vs-numba speedup, and where is the hybrid faithful to exact SSA?
+claim: |
+  Rust/numba stays 1.3-2.6x and is nearly flat in event density; the hybrid is faithful to
+  exact SSA only at stochastic_fraction = 1.0 (where it is the exact path).
+description: |
+  5x4 sweep via the regime harness. Speedup is modest and insensitive to event density; the
+  accuracy frontier tracks stochastic fraction, not density.
+baseline:
+  - name: swept-models
+    composite: viva_hybrid.composites.regime.rust_hybrid_benchmark
+visualizations:
+  - name: speedup-event-density-map
+    path: reports/regime/regime_map_event_density_x_stochastic_fraction.html
+    title: "Rust/numba speedup over event density x stochastic fraction"
+expected_behavior:
+  - name: speedup-sub-3x-and-flat
+    observable: "rust_vs_numba across the event_density x stochastic_fraction grid"
+    condition: "<= ~2.6x everywhere; no 5x crossing at system_size=10"
+    rationale: "Per-run Rust advantage over compiled Python is small for small systems."

@@ -1,0 +1,28 @@
+schema_version: 4
+name: rust-engine-in-workbench
+title: "Rust engine runs the hybrid model in the workbench"
+investigation: rust-hybrid-regime-map
+status: complete
+confidence: Accepted
+question: |
+  Does the real compiled Rust hybrid engine run a hybrid ODE/SSA model end-to-end as a
+  process-bigraph composite inside the vivarium-workbench, and how does its per-run speed
+  compare to plain Python?
+claim: |
+  The Rust engine runs the bursting gene-expression benchmark as a workbench composite
+  (RustHybridStep bridging the real run_ir binary) and is ~30-50x faster than plain
+  interpreted Python per run.
+objective: |
+  Wrap the Rust engine as a pbg Step, expose it as a composite generator, run it through
+  the workbench; establish the integration and the plain-Python speedup baseline.
+description: |
+  Vertical slice. Composite viva_hybrid.composites.regime.rust_hybrid_benchmark drives the genuine run_ir binary and emits the engine's
+  simulate wall-time, RK4-step / stochastic-event counts, and mean protein level.
+baseline:
+  - name: benchmark
+    composite: viva_hybrid.composites.regime.rust_hybrid_benchmark
+expected_behavior:
+  - name: rust-engine-runs-and-emits
+    observable: "sim_seconds, steps, events, observable (mean protein)"
+    condition: "all > 0 for the bursting gene-expression benchmark"
+    rationale: "Confirms the real engine executes the hybrid model in the workbench."

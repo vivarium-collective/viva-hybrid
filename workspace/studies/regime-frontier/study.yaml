@@ -1,0 +1,30 @@
+schema_version: 4
+name: regime-frontier
+title: "Regime frontier: system size x stochastic fraction"
+investigation: rust-hybrid-regime-map
+status: complete
+confidence: Accepted
+parent_studies:
+  - {study: speedup-landscape, condition: complete}
+question: |
+  Sweeping system size against stochastic fraction (density 100), is there any cell that is
+  both >=5x faster than numba AND faithful to exact SSA?
+claim: |
+  No. The only >=5x cells are large systems at low stochastic fraction (10.8x at size 100 /
+  fraction 0.1; 6.8x at fraction 0.25), and both FAIL fidelity (worst |z| ~14-17). The
+  faithful cells (stochastic_fraction = 1.0) are ~1.0x. Fast and trustworthy are disjoint.
+description: |
+  The headline map. Speedup grows with system size and shrinks as stochastic fraction rises;
+  the fidelity mask (hybrid vs exact SSA, all species) passes only at fraction 1.0.
+baseline:
+  - name: swept-models
+    composite: viva_hybrid.composites.regime.rust_hybrid_benchmark
+visualizations:
+  - name: regime-frontier-map
+    path: reports/regime/regime_map_system_size_x_stochastic_fraction.html
+    title: "Rust/numba speedup over system size x stochastic fraction, with fidelity mask"
+expected_behavior:
+  - name: no-faithful-and-fast-cell
+    observable: "cells with rust_vs_numba >= 5 AND fidelity_ok == true"
+    condition: "count == 0 across the swept grid"
+    rationale: "Acceptance criterion: in the swept regime no model is both fast (vs numba) and faithful."

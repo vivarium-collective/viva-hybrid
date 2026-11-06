@@ -1,0 +1,74 @@
+[project]
+name = "viva-hybrid"
+version = "0.0.0"
+description = "Process-bigraph research workspace"
+requires-python = ">=3.12"
+# Runtime dependencies are only what the workspace package imports to run its
+# processes, so `pip install <workspace>` stays lean: a backend that installs the
+# package into its own environment (an HPC runner, compose-api, sms-api's
+# extra_pip_deps) gets no dashboard stack. The dashboard is the `dashboard` extra
+# below; the container image and `.[dev]` install it. A process module that
+# imports anything else (numpy, matplotlib, ...) must list it here: `build_core()`
+# skips a module that fails to import, so a backend without it would silently
+# lose that module's processes.
+dependencies = [
+    # Floor: 1.8.5 ships the composite `core_extensions` mechanism (1.8.0) the
+    # dashboard relies on AND the emitter fix (#217) + `requests`/`fire` server
+    # deps. Below this, composite type-registration and agent-embedded emits
+    # break — the root cause behind the map[...] type errors seen in the field.
+    "process-bigraph>=1.8.5",
+    "bigraph-schema>=1.8.1",
+    # The `cli` subpackage reads composite documents with it.
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Web-based workspace dashboard (server + templates + assets + lib helpers),
+# reports and visualizations. vivarium-workbench was extracted from viva-template
+# as of v0.4.16 and provides the `vivarium-workbench serve` CLI invoked by
+# scripts/serve.sh and the container image (Dockerfile, Singularity.def).
+dashboard = [
+    "bigraph-viz>=2.0.3",
+    "jsonschema[format-nongpl]>=4.21",
+    "jinja2>=3.1",
+    "pypdf>=4.0",
+    "matplotlib",
+    "plotly",
+    "vivarium-workbench",
+]
+# Local development and workspace CI (`uv pip install -e ".[dev]"`) run the lint,
+# the reports and the dashboard, so they need it too.
+dev = ["pytest>=7.4", "viva-hybrid[dashboard]"]
+cli = ["typer", "rich"]
+
+[project.scripts]
+viva-hybrid = "viva_hybrid.cli.__main__:main"
+
+# The container image (Dockerfile, Singularity.def) runs `uv sync`, which installs
+# no extras but does install uv's default dependency groups; this group carries the
+# dashboard extra into the image, so `vivarium-workbench serve` is always there.
+# Groups are not package metadata, so `pip install <workspace>` is unaffected.
+[dependency-groups]
+workbench = ["viva-hybrid[dashboard]"]
+
+[tool.uv]
+default-groups = ["workbench"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Allow ecosystem git-direct-reference deps (viva-superpowers / vivarium-workbench
+# @ git+https://…) that workspaces commonly add — hatchling rejects them otherwise.
+[tool.hatch.metadata]
+allow-direct-references = true
+
+# Declare the workspace Python package explicitly so this workspace is
+# pip-installable (e.g. `pip install git+<repo>@<sha>`).  sms-api injects it
+# as an extra_pip_dep so the container runner can import the workspace's
+# processes from a committed + pushed git ref.
+[tool.hatch.build.targets.wheel]
+packages = ["viva_hybrid"]
+
+[tool.uv.sources]
+vivarium-workbench = { path = "/Users/eranagmon/code/vivarium-workbench", editable = true }

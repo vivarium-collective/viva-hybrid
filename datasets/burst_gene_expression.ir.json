@@ -1,0 +1,134 @@
+{
+  "params": {
+    "k_dm": 0.1,
+    "k_dp": 0.02,
+    "k_off": 0.15,
+    "k_on": 0.05,
+    "k_tl": 2.0,
+    "k_tx": 2.0
+  },
+  "reactions": [
+    {
+      "id": "R_act",
+      "partition": "stochastic",
+      "rate": {
+        "mul": [
+          {
+            "param": "k_on"
+          },
+          {
+            "species": "G_off"
+          }
+        ]
+      },
+      "stoichiometry": {
+        "G_off": -1,
+        "G_on": 1
+      }
+    },
+    {
+      "id": "R_deact",
+      "partition": "stochastic",
+      "rate": {
+        "mul": [
+          {
+            "param": "k_off"
+          },
+          {
+            "species": "G_on"
+          }
+        ]
+      },
+      "stoichiometry": {
+        "G_off": 1,
+        "G_on": -1
+      }
+    },
+    {
+      "id": "R_tx",
+      "partition": "stochastic",
+      "rate": {
+        "mul": [
+          {
+            "param": "k_tx"
+          },
+          {
+            "species": "G_on"
+          }
+        ]
+      },
+      "stoichiometry": {
+        "mRNA": 1
+      }
+    },
+    {
+      "id": "R_dm",
+      "partition": "stochastic",
+      "rate": {
+        "mul": [
+          {
+            "param": "k_dm"
+          },
+          {
+            "species": "mRNA"
+          }
+        ]
+      },
+      "stoichiometry": {
+        "mRNA": -1
+      }
+    },
+    {
+      "id": "R_tl",
+      "partition": "continuous",
+      "rate": {
+        "mul": [
+          {
+            "param": "k_tl"
+          },
+          {
+            "species": "mRNA"
+          }
+        ]
+      },
+      "stoichiometry": {
+        "protein": 1
+      }
+    },
+    {
+      "id": "R_dp",
+      "partition": "continuous",
+      "rate": {
+        "mul": [
+          {
+            "param": "k_dp"
+          },
+          {
+            "species": "protein"
+          }
+        ]
+      },
+      "stoichiometry": {
+        "protein": -1
+      }
+    }
+  ],
+  "species": [
+    {
+      "id": "G_off",
+      "initial": 1.0
+    },
+    {
+      "id": "G_on",
+      "initial": 0.0
+    },
+    {
+      "id": "mRNA",
+      "initial": 0.0
+    },
+    {
+      "id": "protein",
+      "initial": 0.0
+    }
+  ]
+}
