@@ -18,6 +18,16 @@ def _stoch_propensity(m):
                for r in m.reactions if r.partition == "stochastic")
 
 
+def _species_partition(m):
+    """Partition of each species' own reactions (prod/deg must agree)."""
+    out = {}
+    for r in m.reactions:
+        if r.id.startswith(("prod_", "deg_")):
+            sp = next(iter(r.stoichiometry))
+            assert out.setdefault(sp, r.partition) == r.partition
+    return out
+
+
 def test_valid_ir_roundtrip(tmp_path):
     m = generate_model(**KW)
     assert isinstance(m, Model)
@@ -57,9 +67,12 @@ def test_size_and_connectivity(s):
 @pytest.mark.parametrize("f", [0.0, 0.1, 0.33, 0.5, 0.9, 1.0])
 def test_stochastic_fraction(f):
     m = generate_model(event_density=10.0, stochastic_fraction=f, system_size=10)
-    n = len(m.reactions)
-    k = sum(r.partition == "stochastic" for r in m.reactions)
-    assert abs(k / n - f) <= 1.0 / n
+    part = _species_partition(m)
+    assert len(part) == 10
+    k = sum(p == "stochastic" for p in part.values())
+    assert abs(k / 10 - f) <= 0.5 / 10 + 1e-12
+    if f > 0:
+        assert k >= 1
     assert {r.partition for r in m.reactions} <= {"continuous", "stochastic"}
 
 
@@ -119,3 +132,44 @@ def test_invalid_params_raise(kw):
     args.update(kw)
     with pytest.raises(ValueError):
         generate_model(**args)
+
+
+def test_tiny_system_gets_a_stochastic_species_when_fraction_positive():
+    m = generate_model(event_density=5.0, stochastic_fraction=0.1, system_size=2)
+    assert "stochastic" in _species_partition(m).values()
+
+
+def test_species_level_partition_and_fixed_point_at_n0():
+    from viva_hybrid_ref._common import compile_rate
+    for f in (0.0, 0.3, 0.7, 1.0):
+        for sep in (1.0, 10.0, 100.0):
+            m = generate_model(event_density=30.0, stochastic_fraction=f,
+                               system_size=9, timescale_sep=sep, seed=2)
+            _species_partition(m)  # prod/deg agree per species
+            idx = {s.id: i for i, s in enumerate(m.species)}
+            x = [s.initial for s in m.species]
+            drift = [0.0] * len(x)
+            for r in m.reactions:
+                a = compile_rate(r.rate, m.params, idx)(x)
+                for k, v in r.stoichiometry.items():
+                    drift[idx[k]] += v * a
+            # N0 is an exact deterministic fixed point regardless of partition/sep
+            assert max(abs(d) for d in drift) < 1e-9 * max(m.params.values()) * 30
+
+
+def test_copy_numbers_stay_near_n0_across_fraction_and_sep():
+    for f in (0.0, 0.5, 1.0):
+        for sep in (1.0, 10.0, 100.0):
+            m = generate_model(event_density=20.0, stochastic_fraction=f,
+                               system_size=6, timescale_sep=sep, seed=1)
+            ts = [0.25, 0.5, 0.75, 1.0]
+            tr = gillespie(m, 1.0, ts, 0)
+            for sp, col in zip(m.species, tr.species):
+                mean = sum(col) / len(col)
+                assert 0.4 * sp.initial < mean < 2.5 * sp.initial, (f, sep, sp.id, mean)
+
+
+def test_nonfinite_event_density_rejected():
+    for bad in (float("inf"), float("nan")):
+        with pytest.raises(ValueError):
+            generate_model(event_density=bad, stochastic_fraction=0.5, system_size=3)
