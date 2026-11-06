@@ -11,7 +11,6 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
-PLOTLY_CDN = "https://cdn.plot.ly/plotly-3.7.0.min.js"
 DEAD, GO = 2.0, 5.0
 ZMAX = 10.0
 # single-hue (blue) sequential for 2x+, neutral grey for the dead band
@@ -110,7 +109,7 @@ def render_regime_map(json_path, out_html, *, title) -> None:
                           font=dict(size=12, color=MUTED), width=900)],
     )
     Path(out_html).parent.mkdir(parents=True, exist_ok=True)
-    fig.write_html(str(out_html), include_plotlyjs=PLOTLY_CDN, full_html=True)
+    fig.write_html(str(out_html), include_plotlyjs="cdn", full_html=True)
 
 
 def main() -> None:

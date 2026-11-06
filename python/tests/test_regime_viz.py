@@ -1,7 +1,10 @@
 import json
 from pathlib import Path
 
+import re
+
 import pytest
+from plotly.offline.offline import get_plotlyjs_version
 
 from viva_hybrid_ref.regime_viz import render_regime_map
 
@@ -27,3 +30,5 @@ def test_render(tmp_path, axes, names):
         assert f'{c["rust_vs_numba"]:.1f}' in html or str(c["rust_vs_numba"])[:6] in html
     assert "fidelity FAIL" in html and "fidelity OK" in html
     assert "numba" in html and "NOT swept" in html
+    m = re.search(r"cdn\.plot\.ly/plotly-(\d+\.\d+\.\d+)\.min\.js", html)
+    assert m and m.group(1) == get_plotlyjs_version()
