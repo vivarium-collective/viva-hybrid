@@ -173,3 +173,46 @@ def test_nonfinite_event_density_rejected():
     for bad in (float("inf"), float("nan")):
         with pytest.raises(ValueError):
             generate_model(event_density=bad, stochastic_fraction=0.5, system_size=3)
+
+
+def test_copy_number_default_reproduces_historical_draw():
+    # copy_number=None and copy_number=20 (center of the old [10,30]) must be byte-identical
+    base = generate_model(**KW, seed=7)
+    assert generate_model(**KW, copy_number=None, seed=7) == base
+    assert generate_model(**KW, copy_number=20, seed=7) == base
+
+
+@pytest.mark.parametrize("C", [50, 200, 1000])
+def test_copy_number_scales_initial_counts(C):
+    m = generate_model(event_density=50.0, stochastic_fraction=0.5, system_size=12,
+                       copy_number=C, seed=0)
+    n0 = [s.initial for s in m.species]
+    assert all(round(0.5 * C) <= v <= round(1.5 * C) for v in n0)
+    assert 0.8 * C < sum(n0) / len(n0) < 1.2 * C   # centered on C
+
+
+@pytest.mark.parametrize("C", [20, 100, 1000])
+def test_axes_independent_of_copy_number(C):
+    """Raising copy number must not perturb the other axes: the stochastic propensity
+    still equals event_density exactly (s re-solved), and N0 stays a deterministic
+    fixed point (drift ~0) — this is what makes the copy-number sweep well-posed."""
+    from viva_hybrid_ref._common import compile_rate
+    m = generate_model(event_density=80.0, stochastic_fraction=0.4, system_size=8,
+                       copy_number=C, seed=3)
+    assert _stoch_propensity(m) == pytest.approx(80.0, rel=1e-9)
+    idx = {s.id: i for i, s in enumerate(m.species)}
+    x = [s.initial for s in m.species]
+    drift = [0.0] * len(x)
+    for r in m.reactions:
+        a = compile_rate(r.rate, m.params, idx)(x)
+        for k, v in r.stoichiometry.items():
+            drift[idx[k]] += v * a
+    assert max(abs(d) for d in drift) < 1e-9 * max(m.params.values()) * 80
+    assert all(m.params[f"k_prod_{i}"] > 0 for i in range(8))   # P_i > 0 at any copy number
+
+
+@pytest.mark.parametrize("bad", [0, 0.5, -5, float("inf"), float("nan")])
+def test_invalid_copy_number_rejected(bad):
+    with pytest.raises(ValueError):
+        generate_model(event_density=10.0, stochastic_fraction=0.5, system_size=4,
+                       copy_number=bad)

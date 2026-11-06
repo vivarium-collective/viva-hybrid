@@ -20,7 +20,7 @@ from .bench import bench
 from .compare import REPO, RUN_IR, compare_distributions, run_all
 from .model_generator import generate_model, write_ir
 
-AXES = ("event_density", "stochastic_fraction", "system_size", "timescale_sep", "dt")
+AXES = ("event_density", "stochastic_fraction", "system_size", "timescale_sep", "dt", "copy_number")
 TOL = dict(z_mean=4.0, z_var=4.0, ks_alpha=0.001)   # same as test_fidelity.py
 
 
@@ -39,24 +39,33 @@ def _fidelity(model, cfg, n_reps, seed):
     with warnings.catch_warnings():   # scipy notes K-S falling back to the asymptotic p (ties)
         warnings.filterwarnings("ignore", message="ks_2samp: Exact calculation")
         rep = compare_distributions(r["rust"], r["exact"], ids, list(cfg["sample_times"]), TOL, ids)
-    zs = [max(abs(x.z_mean), abs(x.z_var)) for x in rep.rows]
+    zm = [abs(x.z_mean) for x in rep.rows]
+    zv = [abs(x.z_var) for x in rep.rows]
+    zs = [max(m, v) for m, v in zip(zm, zv)]
     ks = [x.ks_p for x in rep.rows if not math.isnan(x.ks_p)]
     fails = sorted({f"{x.species}@{x.time:g}:{x.why}" for x in rep.rows if not x.ok})
+    # Split mean vs variance: raising copy number shrinks the DETERMINISTIC bias
+    # (worst_abs_z_mean) but not the partition's suppression of continuous-species
+    # intrinsic variance (worst_abs_z_var) — tracking them apart tells that story.
     return dict(fidelity_ok=bool(rep.passed), worst_abs_z=float(max(zs)),
+                worst_abs_z_mean=float(max(zm)), worst_abs_z_var=float(max(zv)),
                 min_ks_p=float(min(ks)) if ks else None,
                 n_fail_rows=sum(not x.ok for x in rep.rows), n_rows=len(rep.rows),
                 fidelity_fail=fails)
 
 
 def sweep_point(*, event_density, stochastic_fraction, system_size, timescale_sep, dt, t_end,
-                sample_times, n_time_reps, n_time_repeats, n_fidelity_reps, seed=0) -> dict:
+                sample_times, n_time_reps, n_time_repeats, n_fidelity_reps,
+                copy_number=None, seed=0) -> dict:
     axes = dict(event_density=event_density, stochastic_fraction=stochastic_fraction,
-                system_size=system_size, timescale_sep=timescale_sep, dt=dt)
+                system_size=system_size, timescale_sep=timescale_sep, dt=dt,
+                copy_number=copy_number)
     out = dict(axes, t_end=t_end, seed=seed, n_time_reps=n_time_reps,
                n_time_repeats=n_time_repeats, n_fidelity_reps=n_fidelity_reps)
     _ensure_binary()
     model = generate_model(event_density=event_density, stochastic_fraction=stochastic_fraction,
-                           system_size=int(system_size), timescale_sep=timescale_sep, seed=seed)
+                           system_size=int(system_size), timescale_sep=timescale_sep,
+                           copy_number=copy_number, seed=seed)
     with tempfile.TemporaryDirectory() as d:
         write_ir(model, Path(d) / "ir.json")   # the IR the engines consume
     cfg = dict(dt=dt, t_end=t_end, sample_times=list(sample_times))
@@ -80,7 +89,7 @@ def run_sweep(axis_x, axis_y, *, fixed, grid, timing, fidelity) -> list[dict]:
             results.append(sweep_point(**kw))
         except Exception as e:  # record, keep going, surface loudly
             print(f"ERROR at {axis_x}={x} {axis_y}={y}: {e!r}")
-            results.append({**{a: kw[a] for a in AXES}, "error": repr(e)})
+            results.append({**{a: kw.get(a) for a in AXES}, "error": repr(e)})
     return results
 
 
@@ -115,6 +124,13 @@ MAPS = [
     dict(axes=("system_size", "stochastic_fraction"),
          grid=dict(system_size=[3, 10, 30, 100], stochastic_fraction=_F),
          fixed=dict(_COMMON, event_density=100.0)),
+    # The follow-up axis the first two maps did NOT sweep: copy number. Run it at the
+    # speedup corner (system_size=100, where the only >=5x cells live) so the live
+    # question — can high copy make a >=5x cell faithful? — is actually testable.
+    dict(axes=("copy_number", "stochastic_fraction"),
+         grid=dict(copy_number=[20, 100, 300, 1000],
+                   stochastic_fraction=[0.1, 0.25, 0.5, 1.0]),
+         fixed=dict(_COMMON, system_size=100, event_density=100.0)),
 ]
 TIMING = dict(n_time_reps=20, n_time_repeats=3)
 FIDELITY = dict(n_fidelity_reps=400)
@@ -123,10 +139,14 @@ FIDELITY = dict(n_fidelity_reps=400)
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--out-dir", default=str(REPO / "reports" / "regime"))
+    ap.add_argument("--only", default=None,
+                    help="run only maps whose x-axis matches this name (e.g. copy_number)")
     a = ap.parse_args(argv)
     allres = []
     for mp in MAPS:
         ax, ay = mp["axes"]
+        if a.only and ax != a.only:
+            continue
         res = run_sweep(ax, ay, fixed=mp["fixed"], grid=mp["grid"], timing=TIMING, fidelity=FIDELITY)
         path = save_results(res, Path(a.out_dir) / f"sweep_{ax}_x_{ay}.json")
         print(summary(res, ax, ay))

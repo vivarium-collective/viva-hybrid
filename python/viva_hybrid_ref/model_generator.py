@@ -15,10 +15,15 @@ Rate scales (relative): stochastic species scale s, continuous species scale
 c = timescale_sep * s. k_i = scale_i * jitter_i (jitter ~ U(0.7,1.3)).
 conv_i uses q_i = 0.2 * min(k_i, k_{i+1}) (the slower side), and
   P_i = k_i*N0_i + q_i*N0_i - q_{i-1}*N0_{i-1}
-so the net flux of every species is exactly zero at X = N0 (integers in
-[10,30]). N0 is therefore a deterministic fixed point whatever the
-partition draw or timescale_sep: sep only changes how FAST species relax,
-never the copy-number level. (q_{i-1}N0_{i-1} <= 6 k_i < k_i N0_i, so P_i > 0.)
+so the net flux of every species is exactly zero at X = N0. N0 is therefore
+a deterministic fixed point whatever the partition draw or timescale_sep: sep
+only changes how FAST species relax, never the copy-number level. N0 is drawn
+from [round(0.5C), round(1.5C)] for a copy-number center C (copy_number=None =>
+the historical [10,30]); the +/-50% spread is scale-free, so P_i > 0 holds at
+any C (the binding ratio 0.2*N0_{i-1}/N0_i stays <= 0.6 < 1). Because
+event_density re-solves s against the propensity at X = N0, raising C leaves
+the per-unit-time event rate fixed: copy number varies the intrinsic-noise
+level (CV ~ 1/sqrt(N)) independently of every other axis.
 
 event_density: s is solved so the summed propensity of the stochastic
 reactions at X = N0 equals event_density exactly (propensity is linear in s).
@@ -36,7 +41,7 @@ from .ir import Ast, Model, Reaction, Species, dump_ir
 _CONV = 0.2
 
 
-def _check(event_density, stochastic_fraction, system_size, timescale_sep):
+def _check(event_density, stochastic_fraction, system_size, timescale_sep, copy_number):
     if isinstance(system_size, bool) or not isinstance(system_size, (int, np.integer)) or system_size < 1:
         raise ValueError(f"system_size must be an integer >= 1, got {system_size!r}")
     if not 0.0 <= stochastic_fraction <= 1.0:
@@ -45,14 +50,33 @@ def _check(event_density, stochastic_fraction, system_size, timescale_sep):
         raise ValueError(f"event_density must be finite and > 0, got {event_density!r}")
     if not (np.isfinite(timescale_sep) and timescale_sep > 0.0):
         raise ValueError(f"timescale_sep must be finite and > 0, got {timescale_sep!r}")
+    if copy_number is not None and not (np.isfinite(copy_number) and copy_number >= 1.0):
+        raise ValueError(f"copy_number must be None or a number >= 1, got {copy_number!r}")
+
+
+def _copy_bounds(copy_number):
+    """Half-open integer draw range [lo, hi) for the initial copy numbers.
+
+    copy_number=None reproduces the historical [10,30] draw exactly; a given
+    center C draws from [round(0.5C), round(1.5C)] (a +/-50% spread), so C=20
+    is identical to the default. The relative spread is fixed, so the chain's
+    net-flux-zero construction (and thus P_i > 0) holds at any scale: the
+    binding ratio 0.2*N0_{i-1}/N0_i <= 0.2*1.5/0.5 = 0.6 < 1 regardless of C."""
+    if copy_number is None:
+        return 10, 31
+    lo = max(1, int(round(0.5 * copy_number)))
+    hi = int(round(1.5 * copy_number)) + 1
+    return lo, max(lo + 1, hi)
 
 
 def generate_model(*, event_density: float, stochastic_fraction: float, system_size: int,
-                   timescale_sep: float = 10.0, seed: int = 0) -> Model:
-    _check(event_density, stochastic_fraction, system_size, timescale_sep)
+                   timescale_sep: float = 10.0, copy_number: float | None = None,
+                   seed: int = 0) -> Model:
+    _check(event_density, stochastic_fraction, system_size, timescale_sep, copy_number)
     S = int(system_size)
     rng = np.random.default_rng(seed)
-    n0 = [int(v) for v in rng.integers(10, 31, size=S)]
+    lo, hi = _copy_bounds(copy_number)
+    n0 = [int(v) for v in rng.integers(lo, hi, size=S)]
     jitter = rng.uniform(0.7, 1.3, size=S)
     n_stoch = int(round(stochastic_fraction * S))
     if stochastic_fraction > 0.0:

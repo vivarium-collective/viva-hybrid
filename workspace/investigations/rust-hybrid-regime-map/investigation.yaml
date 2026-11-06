@@ -32,15 +32,19 @@ executive:
     The maps shade speedup, draw the >=5x and <2x contours, and mask cells where the
     hybrid is not faithful.
   verdict: |
-    In the swept regime (copy numbers ~10-30, event density 1-1000/min, system size
-    3-100, timescale separation 10x, dt 0.01), NO model regime is both >=5x faster
-    than the numba baseline AND faithful to exact SSA. The >=5x region (large systems,
-    low stochastic fraction) is exactly where the hybrid partition is inaccurate; the
-    faithful region (fully stochastic) is where the Rust speedup is weakest (1-3x).
-    Against plain Python the Rust engine is 29-52x everywhere, but numba is the honest
-    competitor. This generalizes the single-benchmark trial (2.01x -> MARGINAL): for
-    this class of hybrid models a pure-Rust engine does not clear the >=5x bar where
-    it is also trustworthy.
+    Across event density (1-1000/min), system size (3-100), stochastic fraction, and now
+    copy number (N0 swept 20-1000), NO model regime is both >=5x faster than the numba
+    baseline AND faithful to exact SSA. The >=5x region (large systems, low stochastic
+    fraction) is exactly where the hybrid partition is inaccurate; the faithful region
+    (fully stochastic) is where the Rust speedup is weakest (1-3x). Copy number - the axis
+    flagged as most likely to open a faithful-and-fast window - does NOT: the copy-number
+    map is flat, and the >=5x cells stay fidelity FAIL at N0 up to 1000. The failure is
+    entirely variance (the deterministic mean is faithful at every copy number; the hybrid
+    gives continuous species ~zero intrinsic variance, a gap that is copy-number-invariant
+    by construction). Against plain Python the Rust engine is ~30-55x everywhere, but numba
+    is the honest competitor. This generalizes the single-benchmark trial (2.01x ->
+    MARGINAL): for this class of hybrid models a pure-Rust engine does not clear the >=5x
+    bar where it is also trustworthy under a variance-sensitive fidelity gate.
   verdict_status: complete
   verdict_detail: |
     event_density x stochastic_fraction (system_size=10): Rust/numba 1.3-2.6x, nearly
@@ -48,14 +52,23 @@ executive:
     system_size x stochastic_fraction (density=100): Rust/numba 10.8x at (size 100,
     fraction 0.1) and 6.8x at (fraction 0.25) - the only >=5x cells - both fidelity
     FAIL (worst |z| ~14-17); fully-stochastic cells are 1.0x and faithful.
+    copy_number x stochastic_fraction (system_size=100, density=100): FLAT in copy number -
+    at N0 = 20/100/300/1000 the >=5x cells (fraction 0.1: ~10-11x; 0.25: ~7x) all FAIL with
+    worst |z| ~16; worst |z_mean| stays ~2.5-5 (mean faithful) while worst |z_var| stays ~16
+    (variance suppressed). 0 of 16 cells are both >=5x and faithful.
   decisions_needed:
-    - question: "Sweep copy number / species abundance as an axis?"
+    - question: "Adopt a variance-tolerant fidelity criterion (mean-only / relative-variance), or redesign the partition?"
       context: |
-        Copy numbers were held low (~10-30), a regime where deterministic treatment of
-        a continuous species is a poor approximation by construction. High-copy
-        continuous species would be well-approximated deterministically and could open a
-        faithful-and-fast window. Copy number is the single most likely axis to change
-        the verdict and was not swept - the recommended next investigation.
+        Copy number has now been swept (20-1000) and does NOT open a faithful-and-fast
+        window: the >=5x cells fail only on VARIANCE - the deterministic mean is faithful
+        everywhere. Under the current strict all-species absolute-variance gate (|z|<=4), the
+        partition's deliberate suppression of continuous-species intrinsic noise is counted as
+        error at every copy number. For use cases that need only the mean trajectory of the
+        continuous species (often the whole point of treating them deterministically), the
+        >=5x region is already mean-faithful. The open decision is whether the next
+        investigation should (a) evaluate the engine under a mean-only or relative-variance
+        criterion - which would flip the verdict for those use cases - or (b) test a different
+        partition / tau-leaping variant that preserves continuous-species variance.
 
 scientific_argument:
   main_claim: |
@@ -65,15 +78,18 @@ scientific_argument:
   evidence_for:
     - "event_density x stochastic_fraction map: Rust/numba 1.3-2.6x, flat in event density; fidelity passes only at stochastic_fraction=1.0."
     - "system_size x stochastic_fraction map: the only >=5x cells (size 100, fraction <=0.25) all FAIL fidelity; faithful cells (fraction 1.0) are ~1.0x."
+    - "copy_number x stochastic_fraction map (the follow-up axis): flat in copy number - >=5x cells FAIL at N0 up to 1000; worst |z_var| ~16 (copy-invariant) vs worst |z_mean| ~2.5-5. Copy number does not open a faithful-and-fast window."
     - "Generalizes the single-benchmark trial: Rust 2.01x vs numba -> MARGINAL (docs/results/trial-report.md)."
   evidence_against:
     - "Rust is 29-52x vs plain interpreted Python everywhere - if the baseline is naive Python rather than numba, the engine is a large, unambiguous win."
   key_figures:
     - "reports/regime/regime_map_system_size_x_stochastic_fraction.html (speedup over system size x stochastic fraction, with >=5x/<2x contours + fidelity mask; the >=5x region and the faithful region are disjoint)"
     - "reports/regime/regime_map_event_density_x_stochastic_fraction.html (speedup over event density x stochastic fraction, system size 10: flat, sub-3x; faithful only at stochastic_fraction=1.0)"
+    - "reports/regime/regime_map_copy_number_x_stochastic_fraction.html (speedup over copy number x stochastic fraction at system_size=100: flat in copy number; every >=5x cell FAILs fidelity at N0 up to 1000 - the failure is variance, not the mean)"
   caveats:
-    - "Copy numbers held low (~10-30); the fidelity frontier is copy-number dependent and copy number was NOT swept. High-copy continuous species could open a faithful-and-fast window - the top open question."
-    - "'>=5x' is measured against the numba-jitted baseline (the fair competitor); against plain Python the engine is >=29x everywhere."
+    - "Copy number HAS now been swept (N0 20-1000, system_size=100) and does not open a faithful-and-fast window. The remaining caveat is that the failure is variance-only: the deterministic mean is faithful at every copy number, so the verdict is specific to a variance-sensitive fidelity gate."
+    - "The fidelity gate counts absolute all-species variance via a z-score (|z|<=4). It deliberately counts the hybrid's suppression of continuous-species intrinsic noise as error; a mean-only or relative-variance criterion would judge the >=5x region faithful (that criterion is the top open decision)."
+    - "'>=5x' is measured against the numba-jitted baseline (the fair competitor); against plain Python the engine is >=~30x everywhere."
     - "At stochastic_fraction=1.0 the hybrid reduces to the exact stochastic path, so fidelity there tests engine correctness, not the partition approximation."
     - "Single timescale_sep (10x), dt (0.01) and t_end; timing best-of-3 x 20 seeds; fidelity N=400 per cell."
 
@@ -88,20 +104,31 @@ biological_story: |
   compiled Python (numba) is modest (~2x) exactly in the models that are faithful, and
   only grows past 5x in large, mostly-continuous models - which are precisely the ones
   where treating low-copy species deterministically makes the hybrid wrong. The speed
-  is in the regime you cannot trust.
+  is in the regime you cannot trust. The natural rescue - just make the continuous
+  species high-copy, where determinism is supposed to be a good approximation - turns
+  out not to help: sweeping copy number from 20 to 1000, the deterministic MEAN is
+  faithful everywhere, but the ODE gives those species ~zero intrinsic noise while the
+  real system's variance grows with abundance, so a variance-sensitive comparison keeps
+  failing at every copy number. What the partition trades away is the fluctuations, and
+  no amount of abundance buys them back. Whether that matters is the user's call: if you
+  only need the mean trajectory, the fast regime is already accurate; if you need the
+  noise, this partition is the wrong tool at any copy number.
 
 studies:
   - rust-engine-in-workbench
   - speedup-landscape
   - regime-frontier
+  - copy-number-frontier
 
 at_a_glance:
   - {study: rust-engine-in-workbench, role: "Proof the real Rust engine runs the hybrid model as a workbench composite; ~30-50x vs plain Python."}
   - {study: speedup-landscape, role: "event density x stochastic fraction: Rust/numba stays 1.3-2.6x, flat; faithful only when fully stochastic."}
   - {study: regime-frontier, role: "system size x stochastic fraction: the only >=5x cells are exactly the fidelity failures - no faithful-and-fast regime."}
+  - {study: copy-number-frontier, role: "copy number x stochastic fraction: flat in copy number (N0 20-1000) - the >=5x cells stay FAIL; the failure is variance (mean faithful everywhere), closing the open copy-number question."}
 
 acceptance_criteria:
   - {study: regime-frontier, behavior: no-faithful-and-fast-cell}
+  - {study: copy-number-frontier, behavior: no-faithful-and-fast-cell-at-any-copy}
 
 competing_frameworks:
   - name: "Language/engine is the lever (rewrite in Rust)"
