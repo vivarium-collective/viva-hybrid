@@ -9,11 +9,11 @@ The trial (`docs/results/trial-report.md`) measured ONE benchmark: the pure-Rust
 
 ## Goals
 
-1. **Promote viva-hybrid to a viva workspace** (`/viva-workspace` in-place) so the vivarium-workbench can host it.
-2. **Wrap the engines as process-bigraph Steps** (`/viva-expert`), each consuming an IR model + sim config and emitting a trajectory (+ timing for the simulators, ground truth for exact): `RustHybrid`, `PythonHybridPlain`, `PythonHybridNumba`, `ExactSSA`. Reuse the trial's existing engines (do not fork them); the Rust Step bridges the real engine via the `run_ir` release binary (simplest, already exists) unless PyO3 is clearly better.
+1. **Promote viva-hybrid to a viva workspace** (`/viva:workspace` in-place) so the vivarium-workbench can host it.
+2. **Wrap the engines as process-bigraph Steps** (`/viva:model`), each consuming an IR model + sim config and emitting a trajectory (+ timing for the simulators, ground truth for exact): `RustHybrid`, `PythonHybridPlain`, `PythonHybridNumba`, `ExactSSA`. Reuse the trial's existing engines (do not fork them); the Rust Step bridges the real engine via the `run_ir` release binary (simplest, already exists) unless PyO3 is clearly better.
 3. **A parametrized model generator** emitting an IR (and SBML for provenance) for a point in regime space: `(event_density, stochastic_fraction, system_size, timescale_separation, dt)`. Synthetic reaction networks so the axes vary **independently** (the single gene-expression benchmark can't span system size, etc.).
 4. **A sweep harness**: over a grid on the chosen axes, run all engines × N replicates; record **performance** (Rust-vs-numba and Rust-vs-plain speedup, reusing the trial's fair-measurement rules — warm numba, pure `sim_seconds` for Rust, best-of-k) and **accuracy** (hybrid-vs-exact-SSA agreement; dt→0 convergence on the secondary slice).
-5. **A viva Investigation** (`/viva-investigation`) with member **Studies** (`/viva-study`) — one per map/axis — and **Visualizations** (`/viva-viz`): the regime maps.
+5. **A viva Investigation** (`/viva:investigate`) with member **Studies** (`/viva:study`) — one per map/axis — and **Visualizations** (`/viva:viz`): the regime maps.
 6. **Rendered in the workbench** and publishable read-only.
 
 ## The map (headline deliverable)
@@ -44,7 +44,7 @@ The trial (`docs/results/trial-report.md`) measured ONE benchmark: the pure-Rust
 
 - Reuse the trial's engines (`hybrid.rs`, `hybrid_plain`, `hybrid_numba`, `gillespie`, `run_ir`, `compare.py`) and the fidelity harness.
 - Fair-measurement rules from the trial carry over verbatim (warm numba; Rust pure `sim_seconds`; best-of-k; identical workload).
-- vivarium-workbench + process-bigraph are installed here (confirmed: workbench CLI in `~/code/venv`, process-bigraph 1.10.1, viva_superpowers 0.24.0). The workbench must be running for the Study/Investigation steps (`/viva-workbench start`).
+- vivarium-workbench + process-bigraph are installed here (confirmed: workbench CLI in `~/code/venv`, process-bigraph 1.10.1, viva_superpowers 0.24.0). The workbench must be running for the Study/Investigation steps (`/viva:workbench start`).
 - viva_ package-prefix convention for the workspace package.
 
 ## The how, as decided
@@ -58,6 +58,6 @@ The trial (`docs/results/trial-report.md`) measured ONE benchmark: the pure-Rust
 - Exact grid resolution + replicate counts (tune runtime vs contour clarity; the ratio must be stable enough to place the ≥5×/<2× contours).
 - The synthetic generator's reaction-network topology (how size/density/fraction/timescale are parametrized into reactions + partition).
 - Rust Step bridge mechanism: `run_ir` subprocess (default, exists) vs PyO3.
-- Workbench Study/Composite/Investigation schema specifics (driven by `/viva-study`, `/viva-investigation`).
-- Heatmap viz implementation (within `/viva-viz`): contour drawing + accuracy mask.
+- Workbench Study/Composite/Investigation schema specifics (driven by `/viva:study`, `/viva:investigate`).
+- Heatmap viz implementation (within `/viva:viz`): contour drawing + accuracy mask.
 - Whether the sweep is later scaled to the mini/Ray (left as an option).
